@@ -1,0 +1,252 @@
+# Bootstrap analysis: Idea is to bootstrap the proportions a large number of times and calculate the 
+# 95% confidence intervals and then compare them across different treatments. 
+
+setwd("~/Academic/Work/Work/Data/Manuscript 1, Signalling/Analysis/Bootstrapping probabilities/boot_prob csv")
+
+boot_cooc = read.csv ("boot_cooc.csv", header=TRUE, na.strings=c("","-","NA")) 
+boot_enc = read.csv ("boot_enc.csv", header=TRUE, na.strings=c("","-","NA"))
+boot_eat = read.csv ("boot_eat.csv", header=TRUE, na.strings=c("","-","NA"))
+long_cooc = read.csv ("long_cooc.csv", header=TRUE, na.strings=c("","-","NA"))
+long_enc = read.csv ("long_enc.csv", header=TRUE, na.strings=c("","-","NA"))
+long_eat = read.csv ("long_eat.csv", header=TRUE, na.strings=c("","-","NA"))
+
+# 'For loop' to bootstrap the probability results of 
+#  co-oc, enc and eat expts 1000 times
+
+##### Bootstrapping probabilities #####
+
+sim = 1000
+cooc_out = matrix(,nrow=sim,ncol=3) #creating output matrix for co-occurrences of gls with c,nc and f
+colnames(cooc_out) = c("Co_C (35)","Co_NC (42)","Co_F (43)")
+enc_out = matrix(,nrow=sim,ncol=4) #creating output matrix for encounters with c,nc,pf,pcf and wf
+colnames(enc_out) = c("Enc_C (38)","Enc_NC (74)","Enc_PF (45)","Enc_PCF (41)")#"Enc_WF")
+eat_out = matrix(,nrow=sim,ncol=4) #creating output matrix for encounters with c,nc,pf,pcf and wf
+colnames(eat_out) = c("Eat_C (18)","Eat_NC (42)","Eat_PF (25)","Eat_PCF (20)")#"Enc_WF")
+for (i in 1:sim) {
+  cooc_out[i,1]<-mean(sample(long_cooc[long_cooc$oh=="C","cooc"],replace=T))
+  cooc_out[i,2]<-mean(sample(long_cooc[long_cooc$oh=="NC","cooc"],replace=T))
+  cooc_out[i,3]<-mean(sample(long_cooc[long_cooc$oh=="F","cooc"],replace=T))
+  #cooc_out[i,4]<-mean(sample((long_cooc_mf[long_cooc_mf$oh=="NC","cooc"]),replace=T,na.rm=TRUE)
+  enc_out[i,1]<-mean(sample(long_enc[long_enc$oh=="C","enc"],replace=T))
+  enc_out[i,2]<-mean(sample(long_enc[long_enc$oh=="NC","enc"],replace=T))
+  enc_out[i,3]<-mean(sample(long_enc[long_enc$oh=="PF","enc"],replace=T))
+  enc_out[i,4]<-mean(sample(long_enc[long_enc$oh=="PCF","enc"],replace=T))
+  # enc_out[i,5]<-mean(sample(boot_enc$wf,replace=T),replace=T,na.rm=TRUE)
+  eat_out[i,1]<-mean(sample(long_eat[long_eat$oh=="C","eat"],replace=T))
+  eat_out[i,2]<-mean(sample(long_eat[long_eat$oh=="NC","eat"],replace=T))
+  eat_out[i,3]<-mean(sample(long_eat[long_eat$oh=="PF","eat"],replace=T))
+  eat_out[i,4]<-mean(sample(long_eat[long_eat$oh=="PCF","eat"],replace=T))
+  #eat_out[i,5]<-mean(sample(boot_eat$wf,replace=T),replace=T,na.rm=TRUE)
+}
+
+# This section is for splitting F in probability of cooc into PF and PCF based on motivation expt 
+# results (30% of females showd phonotaxis). F in cooc was sampled (without replacement) with a 30% 
+# length of F to form PF and the remaining was PCF. These were resampled several times to form a distribution
+
+sim = 1000
+coocf = matrix(,nrow=sim,ncol=2)
+colnames(coocf) = c("Co_PF (13)","Co_PCF (30)")
+for (i in 1:sim) {
+  temp = sample(length(boot_cooc$f),13,replace=F) 
+  coocf[i,1] = mean(sample(boot_cooc$f[temp],replace=T))
+  coocf[i,2] = mean(sample(boot_cooc$f[-temp],replace=T))
+}
+summary(coocf)
+
+# Multiplying each cell of cooc bootstrap results matrix with the corresponding cell of
+# enc bootstrap results matrix (order of cell to be multiplied not randomised)
+# UPDATE(29.06.16): F in cooc split into PF and PCF (details above) and those used in for multiplying with PF and PCF from enc.
+
+prod_co_en = matrix(,nrow=sim,ncol=4) 
+colnames(prod_co_en) = c("Prod_C","Prod_NC","Prod_PF","Prod_PCF") #"wf")
+for (i in 1:sim) {
+  prod_co_en[i,1] = cooc_out[i,1]*enc_out[i,1]
+  prod_co_en[i,2] = cooc_out[i,2]*enc_out[i,2]
+  prod_co_en[i,3] = coocf[i,1]*enc_out[i,3]
+  prod_co_en[i,4] = coocf[i,2]*enc_out[i,4]
+#  prod_co_en[i,5] = cooc_out[i,3]*enc_out[i,5]
+}
+summary(prod_co_en)
+
+# Multiplying each corresponding cell of cooc, enc and eat bootstrap results matrix to obtain a product of bootstrapped probabilities
+
+prod_all = matrix(,nrow=sim,ncol=4) 
+colnames(prod_all) = c("Prod_C","Prod_NC","Prod_PF","Prod_PCF") #"wf")
+for (i in 1:sim) {
+  prod_all[i,1] = cooc_out[i,1]*enc_out[i,1]*eat_out[i,1]
+  prod_all[i,2] = cooc_out[i,2]*enc_out[i,2]*eat_out[i,2]
+  prod_all[i,3] = coocf[i,1]*enc_out[i,3]*eat_out[i,3]
+  prod_all[i,4] = coocf[i,2]*enc_out[i,4]*eat_out[i,4]
+  #  prod_co_en[i,5] = cooc_out[i,3]*enc_out[i,5]
+}
+summary(prod_all)
+
+##### Plotting the bootstrapped results #####
+
+# Plotting co-occurrence bootstrap results (C, NC and F)
+
+cooc_plot = melt(cooc_out,variable.name="oh",value.name="boot")
+cooc_plot$Var2 = factor(cooc_plot$Var2, c("Co_C (35)","Co_NC (42)","Co_F (43)")) #Reoders the x variable in the way you want it
+ggplot(cooc_plot,aes(x=Var2,y=boot)) + geom_boxplot() + ylim(0.0,0.6) +
+  theme(axis.title.y = element_text(family="Georgia",face="bold",size=15)) +
+  theme(axis.title.x = element_text(family="Georgia",face="bold",vjust=-0.4)) +
+  theme(axis.text.y = element_text(family="Times New Roman",size=15,colour="black")) +
+  theme(axis.text.x = element_text(family="Times New Roman",size=15,colour="black")) +
+  labs(x="Treatments", y="Probability")
+
+# Plotting co-occurrence bootstrap results (C, NC, PF and PCF)
+
+long_coocf = melt(coocf,variable.name="oh",value.name="boot")
+cooc_plot = melt(cooc_out,variable.name="oh",value.name="boot")
+cooc_pf = rbind(cooc_plot,long_coocf) #Combining original dataset with the one containing PF and PCF
+cooc_pf$Var2 = factor(cooc_pf$Var2, c("Co_C (35)","Co_NC (42)","Co_PF (13)","Co_PCF (30)"))
+ggplot(subset(cooc_pf, !(Var2 == "Co_F (43")),aes(x=Var2,y=boot)) + 
+  ylim(0.0,0.6) + geom_boxplot() + #Subset trick learnt from http://bit.ly/29oAfDO  
+  theme(axis.title.y = element_text(family="Georgia",face="bold",size=15)) +
+  theme(axis.title.x = element_text(family="Georgia",face="bold",vjust=-0.4)) +
+  theme(axis.text.y = element_text(family="Times New Roman",size=15,colour="black")) +
+  theme(axis.text.x = element_text(family="Times New Roman",size=15,colour="black")) +
+  labs(x="Treatments", y="Probability")
+
+# Plotting encounter bootstrap results (C, NC, PF and PCF)
+
+enc_plot = melt(enc_out,variable.name="oh",value.name="boot")
+enc_plot$Var2 = factor(enc_plot$Var2, c("Enc_C (38)","Enc_NC (74)","Enc_PF (45)","Enc_PCF (41)")) #Reoders the x variable in the way you want it
+ggplot(enc_plot,aes(x=Var2,y=boot)) + geom_boxplot() + ylim(0.0,0.6) +
+  theme(axis.title.y = element_text(family="Georgia",face="bold",size=15)) +
+  theme(axis.title.x = element_text(family="Georgia",face="bold",vjust=-0.4)) +
+  theme(axis.text.y = element_text(family="Times New Roman",size=15,colour="black")) +
+  theme(axis.text.x = element_text(family="Times New Roman",size=15,colour="black")) +
+  labs(x="Treatments", y="Probability")
+
+# Plotting being eaten bootstrap results (C, NC, PF and PCF)
+
+eat_plot = melt(eat_out,variable.name="oh",value.name="boot")
+eat_plot$Var2 = factor(eat_plot$Var2, c("Eat_C (18)","Eat_NC (42)","Eat_PF (25)","Eat_PCF (20)")) #Reoders the x variable in the way you want it
+ggplot(eat_plot,aes(x=Var2,y=boot)) + geom_boxplot() + ylim(0.0,0.6) +
+  theme(axis.title.y = element_text(family="Georgia",face="bold",size=15)) +
+  theme(axis.title.x = element_text(family="Georgia",face="bold",vjust=-0.4)) +
+  theme(axis.text.y = element_text(family="Times New Roman",size=15,colour="black")) +
+  theme(axis.text.x = element_text(family="Times New Roman",size=15,colour="black")) +
+  labs(x="Treatments", y="Probability")
+
+# Plotting the product of cooc and enc (C, NC, PF and PCF)
+
+prod_co_en_plot = melt(prod_co_en,variable.name="oh",value.name="boot")
+prod_co_en_plot$Var2 = factor(prod_co_en_plot$Var2, c("Prod_C","Prod_NC","Prod_PF","Prod_PCF")) #Reoders the x variable in the way you want it
+ggplot(prod_co_en_plot,aes(x=Var2,y=boot)) + geom_boxplot() + ylim(0.0,0.2) +
+  theme(axis.title.y = element_text(family="Georgia",face="bold",size=15)) +
+  theme(axis.title.x = element_text(family="Georgia",face="bold",vjust=-0.4)) +
+  theme(axis.text.y = element_text(family="Times New Roman",size=15,colour="black")) +
+  theme(axis.text.x = element_text(family="Times New Roman",size=15,colour="black")) +
+  labs(x="Treatments", y="Probability")
+
+# Plotting the product of cooc, enc and eat (C, NC, PF and PCF)
+
+prod_all_plot = melt(prod_all,variable.name="oh",value.name="boot")
+prod_all_plot$Var2 = factor(prod_all_plot$Var2, c("Prod_C","Prod_NC","Prod_PF","Prod_PCF")) #Reoders the x variable in the way you want it
+ggplot(prod_all_plot,aes(x=Var2,y=boot)) + geom_boxplot() + ylim(0.0,0.03) +
+  theme(axis.title.y = element_text(family="Georgia",face="bold",size=15)) +
+  theme(axis.title.x = element_text(family="Georgia",face="bold",vjust=-0.4)) +
+  theme(axis.text.y = element_text(family="Times New Roman",size=15,colour="black")) +
+  theme(axis.text.x = element_text(family="Times New Roman",size=15,colour="black")) +
+  labs(x="Treatments", y="Probability")
+ 
+## Plotting comparisons of probabilities of cooc and enc and their product
+
+all_prob_coen = rbind(cooc_plot,enc_plot,prod_co_en_plot)
+all_prob_coen$Var2 = factor(all_prob_coen$Var2, 
+                       c("Co_C (35)","Enc_C (38)","Prod_C",
+                         "Co_NC (42)","Enc_NC (74)","Prod_NC",
+                         "Co_F (43)","Enc_PF (45)","Prod_PF",
+                         "Enc_PCF (41)","Prod_PCF")) #Reoders the x variable in the way you want it
+
+ggplot(all_prob_coen,aes(x=Var2,y=boot)) + geom_boxplot() + ylim(0.0,0.6) +
+  theme(axis.title.y = element_text(family="Georgia",face="bold")) +
+  theme(axis.title.x = element_text(family="Georgia",face="bold",vjust=-0.4)) +
+  theme(axis.text.y = element_text(family="Times New Roman",size=15,colour="black")) +
+  theme(axis.text.x = element_text(family="Times New Roman",size=15,colour="black")) +
+  labs(x="Treatments", y="Probability")
+
+# Plotting comparisons of all probabilites
+
+all_prob = rbind(cooc_plot,enc_plot,eat_plot,prod_all_plot)
+all_prob$Var2 = factor(all_prob$Var2, 
+                     c("Co_C (35)","Enc_C (38)","Eat_C (18)","Prod_C",
+                       "Co_NC (42)","Enc_NC (74)","Eat_NC (45)","Prod_NC",
+                       "Co_F (43)","Enc_PF (45)","Eat_PF (25)","Prod_PF",
+                       "Enc_PCF (41)","Eat_PCF (20)","Prod_PCF")) #Reoders the x variable in the way you want it
+
+ggplot(all_prob,aes(x=Var2,y=boot)) + geom_boxplot() + ylim(0.0,0.6) +
+  theme(axis.title.y = element_text(family="Georgia",face="bold")) +
+  theme(axis.title.x = element_text(family="Georgia",face="bold",vjust=-0.4)) +
+  theme(axis.text.y = element_text(family="Times New Roman",size=15,colour="black")) +
+  theme(axis.text.x = element_text(family="Times New Roman",size=15,colour="black")) +
+  labs(x="Treatments", y="Probability")
+
+##### Plotting confidence intervals of bootstrapped results #####
+
+# Plotting only conf. int of product of cooc and enc (Help from Monisha and http://bit.ly/1QO8K5b)
+
+ggplot(cooc_plot,aes(x=Var2,y=boot)) + 
+  stat_summary(fun.data=median_hilow, conf.int=0.95) + ylim(0.0,0.6) +
+  theme(axis.title.y = element_text(family="Georgia",face="bold",size=15)) +
+  theme(axis.title.x = element_text(family="Georgia",face="bold",vjust=-0.4)) +
+  theme(axis.text.y = element_text(family="Times New Roman",size=15,colour="black")) +
+  theme(axis.text.x = element_text(family="Times New Roman",size=15,colour="black")) +
+  labs(x="Treatments", y="Probability")
+
+# Prob. of cooc with PF and PCF
+
+long_coocf = melt(coocf,variable.name="oh",value.name="boot")
+cooc_plot = melt(cooc_out,variable.name="oh",value.name="boot")
+cooc_pf = rbind(cooc_plot,long_coocf) #Combining original dataset with the one containing PF and PCF
+cooc_pf$Var2 = factor(cooc_pf$Var2, c("Co_C (35)","Co_NC (42)","Co_PF (13)","Co_PCF (30)"))
+
+p31 = ggplot(subset(cooc_pf, !(Var2 == "Co_F (43")),aes(x=Var2,y=boot)) + #Subset trick learnt from http://bit.ly/29oAfDO
+      stat_summary(fun.data=median_hilow, conf.int=0.95) + ylim(0.0,0.6) +
+      theme(axis.title.y = element_text(family="Georgia",face="bold",size=15)) +
+      theme(axis.title.x = element_text(family="Georgia",face="bold",vjust=-0.4)) +
+      theme(axis.text.y = element_text(family="Times New Roman",size=20,colour="black")) +
+      theme(axis.text.x = element_text(family="Times New Roman",size=15,colour="black")) +
+      labs(x="Treatments", y="Probability")
+
+p32 = ggplot(enc_plot,aes(x=Var2,y=boot)) + 
+      stat_summary(fun.data=median_hilow, conf.int=0.95) + ylim(0.0,0.6) +
+      theme(axis.title.y = element_text(family="Georgia",face="bold",size=15)) +
+      theme(axis.title.x = element_text(family="Georgia",face="bold",vjust=-0.4)) +
+      theme(axis.text.y = element_text(family="Times New Roman",size=20,colour="black")) +
+      theme(axis.text.x = element_text(family="Times New Roman",size=15,colour="black")) +
+      labs(x="Treatments", y="Probability")
+
+p33 = ggplot(eat_plot,aes(x=Var2,y=boot)) + 
+      stat_summary(fun.data=median_hilow, conf.int=0.95) + ylim(0.0,0.6) +
+      theme(axis.title.y = element_text(family="Georgia",face="bold",size=15)) +
+      theme(axis.title.x = element_text(family="Georgia",face="bold",vjust=-0.4)) +
+      theme(axis.text.y = element_text(family="Times New Roman",size=20,colour="black")) +
+      theme(axis.text.x = element_text(family="Times New Roman",size=15,colour="black")) +
+      labs(x="Treatments", y="Probability")
+
+p34 = ggplot(prod_co_en_plot,aes(x=Var2,y=boot)) + 
+      stat_summary(fun.data=median_hilow, conf.int=0.95) + ylim(0.0,0.2) +
+      theme(axis.title.y = element_text(family="Georgia",face="bold",size=15)) +
+      theme(axis.title.x = element_text(family="Georgia",face="bold",vjust=-0.4)) +
+      theme(axis.text.y = element_text(family="Times New Roman",size=20,colour="black")) +
+      theme(axis.text.x = element_text(family="Times New Roman",size=15,colour="black")) +
+      labs(x="Treatments", y="Probability")
+
+grid.arrange(p31,p32,p33,p34,ncol=2)
+
+# Plotting only conf. int of product of cooc, enc and eat
+
+ggplot(prod_all_plot,aes(x=Var2,y=boot)) + 
+  stat_summary(fun.data=median_hilow, conf.int=0.95) + ylim(0.0,0.02) +
+  theme(axis.title.y = element_text(family="Georgia",face="bold",size=15)) +
+  theme(axis.title.x = element_text(family="Georgia",face="bold",vjust=-0.4)) +
+  theme(axis.text.y = element_text(family="Times New Roman",size=20,colour="black")) +
+  theme(axis.text.x = element_text(family="Times New Roman",size=15,colour="black")) +
+  labs(x="Treatments", y="Probability")
+
+ggplot(all_prob,aes(x=Var2,y=boot)) + 
+  stat_summary(fun.data=median_hilow, conf.int=0.95)+ ylim(0.0,0.6) +
+  labs(title="95% Confidence Intervals of Bootstrapped probabilities", x="O. henryi", y="Probability")
