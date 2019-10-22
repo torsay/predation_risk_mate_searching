@@ -1,3 +1,12 @@
+# The code first evaluates whether there is movement across bushes, in successive sampling points (1900-2000 or 2000-2100), 
+# only within a night. If there is movement, it records distances between such focal male's pre-movement location and 
+# the location of all callers the focal could hear. This step is to list all callers the focal male could hear when it moved.
+# Next, it measures the distances between all these callers' locations and the post-movement location of the focal and records
+# only the nearest-neighbour (NN) distance. Next it simulates a random post-movement location for the focal and measures
+# NN distance from all callers it could hear prior to movement. Once this simulation is run 5000 times, the median is saved 
+# as a representative of the simulation and this was saved as the simulated result for focal. All real and simulated NNs will
+# then be compared using randomisation test.
+
 library(xlsx)
 library(dplyr)
 
