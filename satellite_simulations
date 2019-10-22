@@ -1,0 +1,148 @@
+library(xlsx)
+library(dplyr)
+
+setwd("")
+
+
+# Creating an output dataframe for storing primarily least distance between focal and all callers of the same time period when the focal initiated movement
+sat_output_simu = matrix(, nrow = sum(!is.na(incrisk_satellite$location)), 
+                  ncol = ncol(incrisk_satellite)) # This is for the output file which will store all callers from a particular sampling session
+
+sat_output_simu = as.data.frame(sat_output_simu)
+colnames(sat_output_simu) = colnames(incrisk_satellite)
+sat_output_simu["NN_dist_real"] = NA
+sat_output_simu["NN_CE"] = NA
+sat_output_simu["NN_ID_real"] = NA
+sat_output_simu["NN_dist_simu_median"] = NA
+simu = 5000 # Number of iterations you want the simulation to run
+
+# This counter ensures movement to the next row of the output file, only if the iteration satisfies all 
+# conditions (no NAs, movement across consecutive time periods and presence of callers in the relevant sampling hour as the focal)
+n = 1
+
+# Outer loop travels across nights to decide whether there was movement across successive time points, within a night
+for (i in seq(from=1,to=270,by=45)) { # 270 because it is across 6 nights. 45 because 15 individuals multiplied by 3 sampling points.
+  
+  # Inner loop travels across individuals within a night and measures NN distance between focal and caller
+  for (k in i:(i+30)) {  
+    
+    ### 1a. Discounting instances of locations being NAs
+    # Since NAs were not removed from the dataframe, if there is an NA at either of the two locations (location at 
+    # next time point or the current) the loop moves on. NA here means the individual was not localised
+    if (is.na(incrisk_satellite[k,2]) == "TRUE") next
+    if (is.na(incrisk_satellite[k+15,2]) == "TRUE") next
+    if (incrisk_satellite[k,3] == "2100") next # Since we don't want comparisons to be made across nights
+    
+    ### 1b. Discounting instances of no movement 
+    # If location at next time point is the same as current, the loop moves on ([,2] is the location column)
+    if (as.integer(incrisk_satellite[k,2]) == as.integer(incrisk_satellite[k+15,2])) next 
+    
+    ### 2a. Creates temporary matrix of relevant no. of callers in that sampling session
+    # Temporary output matrix (with row numbers equal to number of all callers in that night) to store all callers 
+    # from the previous sampling session (that potentially influenced the focal cricket's decision to move)
+    sat_temp_pre = matrix(,nrow =
+                   # With row no.s equal to calling males from the sampling session that the focal belongs to when it initiated movement. 
+                   # This was done by choosing the relevant sampling time, night and only callers (and discounting the focal itself)
+                   nrow(incrisk_satellite[which(incrisk_satellite$time == as.character(incrisk_satellite[k,3]) & # Selecting the same sampling hour as the focal
+                                         incrisk_satellite$night == as.numeric(incrisk_satellite[k,4]) & # Selecting the same sampling night as the focal
+                                         incrisk_satellite$calling.effort.hour > 0.0 & # Selecting all callers in the selected time period
+                                         incrisk_satellite$male.id != as.character(incrisk_satellite[k,1])),]), # Unselecting the focal from the list of callers, in case it is present
+                          ncol = ncol(incrisk_satellite)) 
+    
+    colnames(sat_temp_pre) = colnames(incrisk_satellite) # Naming the column names of temp file according to the original dataframe
+    sat_temp_pre = as.data.frame(sat_temp_pre) # Declaring the temp file as a dataframe. Initiating the temp file as a matrix allows for more freedom in deciding rows
+    sat_temp_pre[nrow(sat_temp_pre)+1,] <- NA # Adding an extra row to accomodate focal animal.
+    
+    # If there are no callers in the sampling hour of the focal, go to next focal, because there are no NNs to measure
+    if (nrow(sat_temp_pre) < 2) next
+    # Storing the first row of temp file as the focal to compare location of all other males (callers) with
+    sat_temp_pre[1,] = incrisk_satellite[k,] 
+    # Storing the rest of the rows of the temp file with callers from the same sampling period as the focal.
+    # Same logic as used for deciding nrows for the temp file. 
+    sat_temp_pre[2:nrow(sat_temp_pre),] = incrisk_satellite[which(incrisk_satellite$time == as.character(incrisk_satellite[k,3]) & 
+                                                                    incrisk_satellite$night == as.numeric(incrisk_satellite[k,4]) & 
+                                                                    incrisk_satellite$calling.effort.hour > 0.0 & 
+                                                                    incrisk_satellite$male.id != as.character(incrisk_satellite[k,1])),]
+    # Adding a column to store distances between all callers and focal animal
+    sat_temp_pre["dist_from_focal"] = NA
+    
+    ### 2b. For loop to measure distance between focal and all callers it could hear, before it moved 
+    # The following loop measures distance b/w focal and each caller using the distance-b/w-each-bush matrix
+    for (l in 2:nrow(sat_temp_pre)) { # 2 because the first row in this file is the focal animal
+      sat_temp_pre[l,13] = bdist_table[sat_temp_pre[1,2],sat_temp_pre[l,2]]
+    }
+    
+    # Storing only those callers that the focal could hear
+    sat_temp_pre_hear = sat_temp_pre[-1,] %>% # This removes the first row which is the focal individual for reference
+      filter(dist_from_focal < 250) # Distance threshold chosen based on Deb (2015)
+    
+    ### 3a. Distance between focal's new location and callers it could hear before movement (real)
+    # Creating a new matrix to store data of focal post movement and data of all callers it could hear pre movement
+    sat_temp_real = matrix(, nrow = 1, ncol = ncol(incrisk_satellite))
+    colnames(sat_temp_real) = colnames(incrisk_satellite) # Naming the column names of temp file according to the original dataframe
+    sat_temp_real = as.data.frame(sat_temp_real)
+    
+    # Storing the first row of temp file as the focal to compare location of all other males (callers) with
+    sat_temp_real[1,] = incrisk_satellite[k+15,]
+    
+    # Adding a column to store distances between all callers and focal animal. This column is present in one dataframe but 
+    # not present in the other. Hence, adding it here since the two dataframes will be combined next
+    sat_temp_real["dist_from_focal"] = NA
+    
+    # Combining the 2 dataframes, 1 of all callers a focal could hear pre-movement and the 2nd with the details of the focal post-movement
+    sat_temp_real = rbind(sat_temp_real,sat_temp_pre_hear)
+    
+    # If there are no callers within hearing proximity of the focal, go to next focal, because there were no callers the focal could hear before it moved
+    if (nrow(sat_temp_real) < 2) next 
+    
+    # Clearing all the distance values calculated from the pre-movement for loop to make way for calculating
+    # the distance between focal's new post-movement location and the location of all callers it could hear before moving
+    sat_temp_real$dist_from_focal = NA
+    
+    ### 3b. For loop to measure distance between focal and all callers (real data)
+    # The following loop measures distance b/w the focal location after it has moved with the location of all callers it 
+    # could hear before moving, using the distance-b/w-each-bush matrix
+    for (m in 2:nrow(sat_temp_real)) { # 2 because the first row in this file is the focal animal
+      sat_temp_real[m,13] = bdist_table[sat_temp_real[1,2],sat_temp_real[m,2]]
+    }
+    
+    # This file stores the distance measured between the focal's simulated location and all callers that the focal could 
+    # hear before it moved. Since the steps to create a matrix for storing data on callers that focal could hear is the same 
+    # for real and simulated data, I'm duplicating the real file as simulated file WITHOUT THE DISTANCE DATA
+    sat_temp_simu = sat_temp_real
+    sat_temp_simu$dist_from_focal = NA
+    
+    ### 4a. Distance between focal's new simulated locations and callers it could hear before movement (simulations)
+    # Creating a temporary output dataframe for storing simulation results of measuring the distance between focal and the closest caller (it could hear before it moved. 
+    # Simulations will be run 5000 times, and their median value will be saved as a representative.
+    sat_mult_simu = matrix(,nrow = simu, # Simulations will be run 5k times. The number of rows is not a 5k multiple of the number of callers the focal could hear since we only choose one (NN) caller per iteration.
+                           ncol = 2) # 2 because we are only interested in the simulated least (i.e. NN) distance and the male ID of the NN
+    sat_mult_simu = as.data.frame(sat_mult_simu)
+    colnames(sat_mult_simu) = c("NN_ID_simu","NN_dist_simu")
+    
+    ### 4b. For loop to measure distance between focal and all callers (simulated data)
+    # The following loop measures distance b/w the simulated focal location after it has moved with the
+    # location of all callers it could hear before moving, using the distance-b/w-each-bush matrix
+    for (q in 1:nrow(sat_mult_simu)) {
+      for (p in 2:nrow(sat_temp_simu)) { # 2 because the first row in this file is the focal animal
+        # This randomises the location of the focal given the chosen cage and season and compares with the location of each caller
+        sat_temp_simu[p,13] = bdist_table[sample(nrow(bdist_table),1),sat_temp_simu[p,2]]
+      }
+      sat_mult_simu[q,1] = sat_temp_simu$male.id[which.min(sat_temp_simu$dist_from_focal)] # saving NN's identity that hour from simulated data
+      sat_mult_simu[q,2] = sat_temp_simu$dist_from_focal[which.min(sat_temp_simu$dist_from_focal)] # saving dist b/w focal and NN from simulated data 
+    }
+    
+    ### 5. Saving results of NN individual in output file
+    # Saving the details of the focal from where it moved (POC of where it moved from is important). 
+    sat_output_simu[n,1:12] = incrisk_satellite[k,] 
+    # Now saving details of the row with least distance from focal (or NN), i.e. least value in "dist_from_focal" 
+    sat_output_simu[n,13] = sat_temp_real$dist_from_focal[which.min(sat_temp_real$dist_from_focal)] # saving dist b/w focal and NN
+    sat_output_simu[n,14] = sat_temp_real$calling.effort.hour[which.min(sat_temp_real$dist_from_focal)] # saving real NN's calling effort that hour
+    sat_output_simu[n,15] = sat_temp_real$male.id[which.min(sat_temp_real$dist_from_focal)] # saving real NN's identity that hour
+    sat_output_simu[n,16] = median(sat_mult_simu$NN_dist_simu) # saving median dist b/w focal and NN from simulated data (5k iterations)
+    n = n+1 # This moves the counter of the output file, only if it satisfies all conditions (no NAs, movement across consecutive time periods and presence of callers in the relevant sampling hour as the focal
+    print(k)
+    }
+}
+
+sat_output_simu = sat_output_simu %>% na.omit() 
